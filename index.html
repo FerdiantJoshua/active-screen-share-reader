@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Screen Monitor</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+        
+        .controls {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+        
+        button {
+            padding: 8px 16px;
+            margin: 0 5px;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+            background-color: #4CAF50;
+            color: white;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        button#stopBtn {
+            background-color: #f44336;
+        }
+        
+        button#stopBtn:hover {
+            background-color: #da190b;
+        }
+        
+        button#captureBtn {
+            background-color: #2196F3;
+        }
+        
+        button#captureBtn:hover {
+            background-color: #0b7dda;
+        }
+        
+        .screenshot-container {
+            position: relative;
+            margin-top: 80px;
+            overflow: hidden;
+        }
+        
+        #screenshot {
+            max-width: 100%;
+            height: auto;
+        }
+        
+        #selectionBox {
+            position: absolute;
+            border: 2px solid #2196F3;
+            background-color: rgba(33, 150, 243, 0.1);
+            display: none;
+            pointer-events: none;
+        }
+        
+        input[type="number"] {
+            width: 60px;
+            padding: 5px;
+            margin: 0 5px;
+        }
+        
+        label {
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <button id="startBtn">Start</button>
+        <button id="stopBtn">Stop</button>
+        <label>
+            Interval (ms):
+            <input type="number" id="interval" value="1000" min="100" step="100">
+        </label>
+        <button id="captureBtn">Capture Selection</button>
+    </div>
+    
+    <div class="screenshot-container">
+        <img id="screenshot" src="" alt="Screenshot">
+        <div id="selectionBox"></div>
+    </div>
+
+    <div style="display:none">
+        <a id="copyInterim"></a>
+    </div>
+
+    <script>
+        let intervalId = null;
+        let isDrawing = false;
+        let startX, startY;
+        let selectionActive = false;
+        
+        const screenshot = document.getElementById('screenshot');
+        const selectionBox = document.getElementById('selectionBox');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const intervalInput = document.getElementById('interval');
+        const captureBtn = document.getElementById('captureBtn');
+
+        const copyInterim = document.getElementById('copyInterim');
+
+        screenshot.ondragstart = function() { return false; };
+        
+        async function updateScreenshot() {
+            try {
+                const response = await fetch('/getLatestScreenshot');
+                const blob = await response.blob();
+                screenshot.src = URL.createObjectURL(blob);
+            } catch (error) {
+                console.error('Error fetching screenshot:', error);
+            }
+        }
+        
+        function startPolling() {
+            if (intervalId) return;
+            const interval = parseInt(intervalInput.value);
+            intervalId = setInterval(updateScreenshot, interval);
+            updateScreenshot();
+        }
+        
+        function stopPolling() {
+            if (intervalId) {
+                clearInterval(intervalId);
+                intervalId = null;
+            }
+        }
+        
+        startBtn.addEventListener('click', startPolling);
+        stopBtn.addEventListener('click', stopPolling);
+        
+        // Selection box functionality
+        screenshot.addEventListener('mousedown', (e) => {
+            if (!selectionActive) return;
+            isDrawing = true;
+            const rect = screenshot.getBoundingClientRect();
+            startX = e.clientX - rect.left;
+            startY = e.clientY - rect.top;
+            selectionBox.style.left = `${startX}px`;
+            selectionBox.style.top = `${startY}px`;
+            selectionBox.style.width = '0';
+            selectionBox.style.height = '0';
+            selectionBox.style.display = 'block';
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (!isDrawing) return;
+            const rect = screenshot.getBoundingClientRect();
+            const currentX = e.clientX - rect.left;
+            const currentY = e.clientY - rect.top;
+            
+            const width = currentX - startX;
+            const height = currentY - startY;
+            
+            selectionBox.style.width = `${Math.abs(width)}px`;
+            selectionBox.style.height = `${Math.abs(height)}px`;
+            selectionBox.style.left = `${width < 0 ? currentX : startX}px`;
+            selectionBox.style.top = `${height < 0 ? currentY : startY}px`;
+        });
+        
+        document.addEventListener('mouseup', () => {
+            if (isDrawing == true) {
+                isDrawing = false;
+    
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                
+                const rect = selectionBox.getBoundingClientRect();
+                const imgRect = screenshot.getBoundingClientRect();
+                
+                // Calculate the scaling factors between displayed size and natural size
+                const scaleX = screenshot.naturalWidth / screenshot.width;
+                const scaleY = screenshot.naturalHeight / screenshot.height;
+                
+                // Calculate the selection in terms of the original image dimensions
+                const sourceX = (rect.left - imgRect.left) * scaleX;
+                const sourceY = (rect.top - imgRect.top) * scaleY;
+                const sourceWidth = rect.width * scaleX;
+                const sourceHeight = rect.height * scaleY;
+                
+                // Set canvas dimensions to match the source dimensions for 1:1 pixel mapping
+                canvas.width = sourceWidth;
+                canvas.height = sourceHeight;
+                
+                // Enable image smoothing for better quality
+                context.imageSmoothingEnabled = true;
+                context.imageSmoothingQuality = 'high';
+                
+                context.drawImage(
+                    screenshot,
+                    (rect.left - imgRect.left) * (screenshot.naturalWidth / screenshot.width),
+                    (rect.top - imgRect.top) * (screenshot.naturalHeight / screenshot.height),
+                    rect.width * (screenshot.naturalWidth / screenshot.width),
+                    rect.height * (screenshot.naturalHeight / screenshot.height),
+                    0, 0, canvas.width, canvas.height
+                );
+                
+                // ===== ORIGINAL COPY TO CLIPBOARD SOLUTION
+                // navigator.clipboard.write([
+                //     new ClipboardItem({ 'image/png': canvas.toDataURL() })
+                // ]);
+
+                // ===== OPEN THE IMAGE IN NEW TAG
+                const link = document.createElement('a');
+                link.download = 'selection.png';
+                // --- comment these 2 lines to download instead of opening in new tab
+                link.target = '_blank';
+                link.rel = 'noopener noreferrer';
+                // ---
+                link.href = canvas.toDataURL();
+                link.click();
+            }
+        });
+        
+        captureBtn.addEventListener('click', () => {
+            selectionActive = !selectionActive;
+            captureBtn.textContent = selectionActive ? 'Cancel Selection' : 'Capture Selection';
+            if (!selectionActive) {
+                selectionBox.style.display = 'none';
+            }
+        });
+        
+        // // Download selection when double clicking the selection box
+        // selectionBox.addEventListener('dblclick', () => {
+        //     const canvas = document.createElement('canvas');
+        //     const context = canvas.getContext('2d');
+            
+        //     const rect = selectionBox.getBoundingClientRect();
+        //     const imgRect = screenshot.getBoundingClientRect();
+            
+        //     // Calculate the scaling factors between displayed size and natural size
+        //     const scaleX = screenshot.naturalWidth / screenshot.width;
+        //     const scaleY = screenshot.naturalHeight / screenshot.height;
+            
+        //     // Calculate the selection in terms of the original image dimensions
+        //     const sourceX = (rect.left - imgRect.left) * scaleX;
+        //     const sourceY = (rect.top - imgRect.top) * scaleY;
+        //     const sourceWidth = rect.width * scaleX;
+        //     const sourceHeight = rect.height * scaleY;
+            
+        //     // Set canvas dimensions to match the source dimensions for 1:1 pixel mapping
+        //     canvas.width = sourceWidth;
+        //     canvas.height = sourceHeight;
+            
+        //     // Enable image smoothing for better quality
+        //     context.imageSmoothingEnabled = true;
+        //     context.imageSmoothingQuality = 'high';
+            
+        //     // Draw the selection at original resolution
+        //     context.drawImage(
+        //         screenshot,
+        //         sourceX, sourceY,
+        //         sourceWidth, sourceHeight,
+        //         0, 0,
+        //         canvas.width, canvas.height
+        //     );
+            
+        //     const link = document.createElement('a');
+        //     link.download = 'selection.png';
+        //     // Use maximum quality for PNG export
+        //     link.href = canvas.toDataURL('image/png', 1.0);
+        //     link.click();
+        // });
+
+        // ===== SUPPORT TOUCHSCREEN DEVICES =====
+        document.addEventListener('touchstart', (event) => {
+            const touch = event.touches[0];
+            const mouseEvent = new MouseEvent('mousedown', {
+                bubbles: true,
+                cancelable: true,
+                clientX: touch.clientX,
+                clientY: touch.clientY,
+            });
+            event.target.dispatchEvent(mouseEvent);
+            }, { passive: false });
+
+        document.addEventListener('touchmove', (event) => {
+        const touch = event.touches[0];
+        const mouseEvent = new MouseEvent('mousemove', {
+            bubbles: true,
+            cancelable: true,
+            clientX: touch.clientX,
+            clientY: touch.clientY,
+        });
+        event.target.dispatchEvent(mouseEvent);
+        }, { passive: false });
+
+        document.addEventListener('touchend', (event) => {
+        const mouseEvent = new MouseEvent('mouseup', {
+            bubbles: true,
+            cancelable: true,
+        });
+        event.target.dispatchEvent(mouseEvent);
+        }, { passive: false });
+    </script>
+</body>
+</html>
