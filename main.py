@@ -30,6 +30,11 @@ class ScreenshotStore:
                 'image': self.latest_screenshot,
                 'timestamp': self.latest_timestamp
             }
+    
+    def clear_screenshot(self):
+        with self.lock:
+            self.latest_screenshot = None
+            self.latest_timestamp = None
         
 screenshot_store = ScreenshotStore()
 
@@ -92,6 +97,11 @@ def get_latest_screenshot():
     #     'image': screenshot_data['image'],
     #     'timestamp': screenshot_data['timestamp'].isoformat()
     # }
+
+@app.route('/clearScreenshot')
+def clear_screenshot():
+    screenshot_store.clear_screenshot()
+    return "OK"
 
 @app.route('/viewer')
 def viewer():

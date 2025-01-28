@@ -48,10 +48,13 @@ Access the server in `localhost:5000`.
 4. `/getLatestScreenshot`  
     Return the screenshot stored in the server's memory.
 
-5. `/viewer`  
+5. `/clearScreenshot`
+    Clear the screenshot memory.
+
+6. `/viewer`  
     The GUI version, to help polling the screenshot periodically, and also support partial screenshot.
 
-6. `/shutdown`
+7. `/shutdown`
     Terminate the server gracefully.
 
 ## Author
