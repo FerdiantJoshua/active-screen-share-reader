@@ -1,0 +1,5 @@
+{
+  "isActive": true,
+  "pollInterval":	5000,
+  "screenshotURLSend": "http://127.0.0.1:5000/screenshot"
+}

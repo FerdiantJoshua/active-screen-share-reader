@@ -15,6 +15,11 @@ pip install -r requirements.txt
 
 ## Usage
 
+1. Copy the `config.example.json` into `config.json`, adjust the value.  
+with the `screenshotURLSend` pointing to this server's `/screenshot` endpoint.
+
+2. Start the server
+
 ### Development Mode
 
 ```sh
